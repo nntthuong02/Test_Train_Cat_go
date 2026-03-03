@@ -5,16 +5,20 @@ from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
 from tqdm import tqdm
 import os
+import pickle
 
 from game_logic import GoGame, MCTS
 from model import GoNet
+
+# Paths for persistence (can be overridden by environment variables for Colab/Drive)
+DATA_PATH = os.getenv("GO_DATA_PATH", "training_data.pkl")
+MODEL_PATH = os.getenv("GO_MODEL_PATH", "go5x5_model.pth")
 
 def generate_self_play_games(num_games=100, simulations=50):
     data = []
     mcts = MCTS(simulations=simulations)
 
-    print(f"Generating {num_games} self-play games...")
-    for _ in tqdm(range(num_games)):
+    for _ in range(num_games):
         game = GoGame()
         game_data = []
 
@@ -36,10 +40,29 @@ def generate_self_play_games(num_games=100, simulations=50):
 
     return data
 
-def train(num_games=1000, simulations=400, epochs=10, batch_size=64, lr=0.001):
-    # 1. Generate data
-    raw_data = generate_self_play_games(num_games=num_games, simulations=simulations)
+def save_data(data, path=DATA_PATH):
+    # Append to existing data if it exists
+    existing_data = []
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            existing_data = pickle.load(f)
     
+    existing_data.extend(data)
+    with open(path, "wb") as f:
+        pickle.dump(existing_data, f)
+    return len(existing_data)
+
+def load_data(path=DATA_PATH):
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            return pickle.load(f)
+    return []
+
+def train_on_data(raw_data, epochs=10, batch_size=128, lr=0.0005):
+    if not raw_data:
+        print("No data to train on.")
+        return
+
     states = torch.tensor(np.array([d[0] for d in raw_data]))
     policies = torch.tensor(np.array([d[1] for d in raw_data]))
     values = torch.tensor(np.array([d[2] for d in raw_data])).float()
@@ -47,15 +70,16 @@ def train(num_games=1000, simulations=400, epochs=10, batch_size=64, lr=0.001):
     dataset = TensorDataset(states, policies, values)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-    # 2. Setup model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
+    print(f"Training on {len(raw_data)} samples using {device}...")
     
     model = GoNet().to(device)
+    if os.path.exists(MODEL_PATH):
+        model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+        print(f"Resuming from {MODEL_PATH}")
+
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-    # 3. Training loop
-    print("Starting training...")
     for epoch in range(epochs):
         model.train()
         total_loss = 0
@@ -65,30 +89,45 @@ def train(num_games=1000, simulations=400, epochs=10, batch_size=64, lr=0.001):
             v = v.to(device).unsqueeze(1)
 
             pred_p, pred_v = model(s)
-
-            # Policy loss (cross entropy)
             loss_p = F.cross_entropy(pred_p, torch.argmax(p, dim=1))
-            # Value loss (mean squared error)
             loss_v = F.mse_loss(pred_v, v)
-
             loss = loss_p + loss_v
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
             total_loss += loss.item()
 
         print(f"Epoch {epoch+1}/{epochs}, Loss: {total_loss:.4f}")
 
-    # 4. Save model
-    model_path = "go5x5_model.pth"
-    torch.save(model.state_dict(), model_path)
-    print(f"Model saved to {model_path}")
+    torch.save(model.state_dict(), MODEL_PATH)
+    print(f"Model saved to {MODEL_PATH}")
+
+def run_pipeline(target_games=100000, batch_games=500, simulations=400):
+    total_data = load_data()
+    current_games = len(total_data) // 20 # Approximation
+    print(f"Current samples in database: {len(total_data)}")
+
+    while current_games < target_games:
+        # 1. Generate a batch of games
+        batch_data = generate_self_play_games(num_games=batch_games, simulations=simulations)
+        
+        # 2. Save data to disk (persistence)
+        total_samples = save_data(batch_data)
+        current_games = total_samples // 20
+        print(f"Progress: ~{current_games}/{target_games} games. Total samples: {total_samples}")
+
+        # 3. Train on all accumulated data
+        # We can also decide to train only on a subset or the whole thing
+        # For simplicity, we train on everything for now
+        total_data = load_data()
+        train_on_data(total_data, epochs=5) # Frequent small updates
 
 if __name__ == "__main__":
-    # Parameters for a "Serious" training run
-    # num_games: 500 (More samples)
-    # simulations: 200 (Better move quality)
-    # epochs: 20 (Stronger learning)
-    train(num_games=500, simulations=200, epochs=20, batch_size=128, lr=0.0005)
+    # To run on Colab for 100k games:
+    # 1. Mount Google Drive
+    # 2. Change paths to your Drive folder
+    # 3. Run: run_pipeline(target_games=100000, batch_games=500, simulations=400)
+    
+    # For a quick test local:
+    run_pipeline(target_games=1000, batch_games=100, simulations=100)

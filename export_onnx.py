@@ -1,5 +1,6 @@
 import torch
 import torch.onnx
+import argparse
 from model import GoNet
 
 def export_to_onnx(pth_path="go5x5_model.pth", onnx_path="go5x5_model.onnx"):
@@ -30,4 +31,9 @@ def export_to_onnx(pth_path="go5x5_model.pth", onnx_path="go5x5_model.onnx"):
     print(f"Model exported to {onnx_path}")
 
 if __name__ == "__main__":
-    export_to_onnx()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--pth_path", type=str, default="go5x5_model.pth", help="Path to the PyTorch model (.pth)")
+    parser.add_argument("--onnx_path", type=str, default="go5x5_model.onnx", help="Path to save the ONNX model")
+    args = parser.parse_args()
+    
+    export_to_onnx(pth_path=args.pth_path, onnx_path=args.onnx_path)
