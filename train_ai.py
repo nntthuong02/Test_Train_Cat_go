@@ -36,9 +36,9 @@ def generate_self_play_games(num_games=100, simulations=50):
 
     return data
 
-def train(num_games=200, epochs=10, batch_size=64, lr=0.001):
+def train(num_games=1000, simulations=400, epochs=10, batch_size=64, lr=0.001):
     # 1. Generate data
-    raw_data = generate_self_play_games(num_games=num_games)
+    raw_data = generate_self_play_games(num_games=num_games, simulations=simulations)
     
     states = torch.tensor(np.array([d[0] for d in raw_data]))
     policies = torch.tensor(np.array([d[1] for d in raw_data]))
@@ -87,5 +87,8 @@ def train(num_games=200, epochs=10, batch_size=64, lr=0.001):
     print(f"Model saved to {model_path}")
 
 if __name__ == "__main__":
-    # Adjust parameters as needed for local resources
-    train(num_games=50, epochs=5)
+    # Parameters for a "Serious" training run
+    # num_games: 500 (More samples)
+    # simulations: 200 (Better move quality)
+    # epochs: 20 (Stronger learning)
+    train(num_games=500, simulations=200, epochs=20, batch_size=128, lr=0.0005)

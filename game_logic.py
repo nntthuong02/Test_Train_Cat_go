@@ -2,15 +2,16 @@ import numpy as np
 import random
 
 class GoGame:
-    def __init__(self, size=5):
+    def __init__(self, size=5, komi=2.5):
         self.size = size
+        self.komi = komi
         self.board = np.zeros((size, size), dtype=int)
         self.current_player = 1
         self.pass_count = 0
         self.is_game_over_flag = False
 
     def copy(self):
-        g = GoGame(self.size)
+        g = GoGame(self.size, self.komi)
         g.board = self.board.copy()
         g.current_player = self.current_player
         g.pass_count = self.pass_count
@@ -50,7 +51,10 @@ class GoGame:
         return self.is_game_over_flag or not (self.board == 0).any()
 
     def get_winner(self):
-        score = np.sum(self.board)
+        # Traditional Go: Black is +1, White is -1.
+        # score > 0 means Black wins, score < 0 means White wins.
+        # We subtract Komi from the raw sum of stones to give White the advantage.
+        score = np.sum(self.board) - self.komi
         if score > 0:
             return 1
         elif score < 0:
@@ -88,9 +92,27 @@ class MCTS:
                 if player == winner:
                     visit_counts[move] += 1
 
-        total = sum(visit_counts.values()) + 1e-6
+        total = sum(visit_counts.values())
         policy = np.zeros(root_game.size * root_game.size)
-        for m, v in visit_counts.items():
-            policy[m] = v / total
+        valid_moves = root_game.get_valid_moves()
+        
+        if not valid_moves:
+            return policy # Should not happen if game is not over
+
+        if total > 0:
+            for m, v in visit_counts.items():
+                policy[m] = v / total
+        else:
+            # Fallback to uniform distribution if no "winning" moves found
+            for m in valid_moves:
+                policy[m] = 1.0 / len(valid_moves)
+
+        # Force sum to 1.0 for np.random.choice precision
+        policy_sum = policy.sum()
+        if policy_sum > 0:
+            policy /= policy_sum
+        else:
+             # Very extreme case, should be handled by valid_moves check above
+             pass
 
         return policy
