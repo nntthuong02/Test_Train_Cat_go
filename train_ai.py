@@ -9,6 +9,7 @@ import pickle
 
 from game_logic import GoGame, MCTS
 from model import GoNet
+import argparse
 
 # Paths for persistence (can be overridden by environment variables for Colab/Drive)
 DATA_PATH = os.getenv("GO_DATA_PATH", "training_data.pkl")
@@ -124,10 +125,20 @@ def run_pipeline(target_games=100000, batch_games=500, simulations=400):
         train_on_data(total_data, epochs=5) # Frequent small updates
 
 if __name__ == "__main__":
-    # To run on Colab for 100k games:
-    # 1. Mount Google Drive
-    # 2. Change paths to your Drive folder
-    # 3. Run: run_pipeline(target_games=100000, batch_games=500, simulations=400)
+    parser = argparse.ArgumentParser(description="Train Go AI using self-play.")
+    parser.add_argument("--target_games", type=int, default=1000, help="Total target games to reach.")
+    parser.add_argument("--batch_games", type=int, default=100, help="Number of games to generate per batch.")
+    parser.add_argument("--simulations", type=int, default=100, help="Number of MCTS simulations per move.")
     
-    # For a quick test local:
-    run_pipeline(target_games=1000, batch_games=100, simulations=100)
+    args = parser.parse_args()
+    
+    print(f"Starting training pipeline:")
+    print(f"  Target Games: {args.target_games}")
+    print(f"  Batch Games:  {args.batch_games}")
+    print(f"  Simulations: {args.simulations}")
+
+    run_pipeline(
+        target_games=args.target_games, 
+        batch_games=args.batch_games, 
+        simulations=args.simulations
+    )
