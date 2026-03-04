@@ -19,7 +19,7 @@ def generate_self_play_games(num_games=100, simulations=50):
     data = []
     mcts = MCTS(simulations=simulations)
 
-    for _ in range(num_games):
+    for _ in tqdm(range(num_games), desc="Generating games"):
         game = GoGame()
         game_data = []
 
